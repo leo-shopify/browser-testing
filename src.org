@@ -1,0 +1,181 @@
+#+OPTIONS: toc:nil
+#+TITLE: Browser testing
+
+Sample setup for browser testing using testem.
+
+--------------------------------------------------------------------------------
+
+Versions used in the document:
+- [[https://nodejs.org/en/][nodejs]]: src_sh[:exports results]{node --version} {{{results(=v8.1.3=)}}}
+- [[https://www.npmjs.com/][npm]]: src_sh[:exports results]{npm --version} {{{results(=5.0.4=)}}}
+
+--------------------------------------------------------------------------------
+
+1. Create an npm package:
+   #+begin_src sh
+     npm init --yes
+   #+end_src
+
+2. Install packages as dev dependencies:
+   #+begin_src sh
+     npm install --save-dev\
+         tape testem rollup\
+         rollup-plugin-node-resolve\
+         rollup-plugin-commonjs\
+         rollup-plugin-node-builtins\
+         rollup-plugin-node-globals
+   #+end_src
+
+   - [[https://www.npmjs.com/package/tape][tape]] for testing.
+   - [[https://www.npmjs.com/package/tape][testem]] to run tests in the browsers.
+   - [[https://www.npmjs.com/package/rollup][rollup]] to convert es6 modules into scripts.
+
+3. Create a =rollup.config.js= configuration file:
+   #+begin_src javascript :tangle rollup.config.js
+     import resolve from 'rollup-plugin-node-resolve';
+     import commonjs from 'rollup-plugin-commonjs';
+     import builtins from 'rollup-plugin-node-builtins';
+     import globals from 'rollup-plugin-node-globals';
+
+     export default {
+       entry: 'tests.js',
+       dest: 'bundle.js',
+       moduleName: 'tests',
+       format: 'iife',
+       plugins: [
+         resolve({jsnext: true, main: true}),
+         commonjs(),
+         globals(),
+         builtins()
+       ]
+     };
+   #+end_src
+
+4. Add a build and test scripts to =package.json=:
+   #+name: package-json-scripts
+   #+begin_src json
+     {
+       "build:tests": "rollup --config rollup.config.js",
+       "testem": "testem",
+       "test": "testem ci --parallel 3"
+     }
+   #+end_src
+   #+begin_src js :exports none
+     /* eslint-env node */
+
+     const fs = require('fs');
+     const name = 'package.json';
+     const pj = JSON.parse(fs.readFileSync(name, 'utf8'));
+
+     pj.scripts = {
+       'build:tests': 'rollup --config rollup.config.js',
+       testem: 'testem',
+       test: 'testem ci --parallel 3'
+     };
+
+     pj.eslintConfig = {
+       parserOptions: {
+         ecmaVersion: 6,
+         sourceType: 'module'
+       },
+       rules: {
+         indent: ['warn', 2]
+       }
+     };
+
+     fs.writeFileSync(name, JSON.stringify(pj, null, 2), 'utf8');
+   #+end_src
+
+5. To see the list of available browsers, run:
+   #+begin_src sh
+     npm run testem launchers
+   #+end_src
+   #+begin_src sh :exports none
+     ./node_modules/.bin/testem launchers
+   #+end_src
+
+   E.g.:
+   #+RESULTS:
+   | Launcher  | Type    | CI | Dev |
+   |-----------+---------+----+-----|
+   | Firefox   | browser | ✔  | ✔   |
+   | Chrome    | browser | ✔  | ✔   |
+   | Safari    | browser | ✔  | ✔   |
+   | PhantomJS | browser | ✔  |     |
+
+6. Create a =testem.json= configuration file:
+   #+begin_src json :tangle testem.json
+     {
+       "framework": "tap",
+       "serve_files": ["bundle.js"],
+       "before_tests": "npm run build:tests",
+       "launch_in_dev": ["Firefox", "Chrome", "Safari"]
+     }
+   #+end_src
+   =tap= is used as the framework since I'm using =tape= for testing, but Mocha
+   and others are also available. See the [[https://github.com/testem/testem/blob/master/docs/config_file.md][configuration file docs]] for details.
+
+7. Create a =tests.js= file with the tests:
+   #+begin_src javascript :tangle tests.js
+     import {test} from 'tape';
+
+     function hello(name){
+       return 'hello ' + (name || 'world');
+     }
+
+     test('hello says hello', t => {
+       t.equal(hello(), 'hello world', 'hello() should be "hello world"');
+       t.end();
+     });
+
+     test('hello says hello to bob', t => {
+       t.equal(hello('bob'), 'hello bob', 'hello(bob) should be "hello bob"');
+       t.end();
+     });
+   #+end_src
+
+8. Run the tests:
+   - In TDD mode:
+     #+begin_src sh
+       npm run testem
+     #+end_src
+
+     Sample output:
+     #+BEGIN_EXAMPLE
+       TEST'EM 'SCRIPTS!
+       Open the URL below in a browser to connect.
+       http://localhost:7357/
+       ━━━━━━━━━━━━━━┓
+           Firefox   ┃     Chrome         Safari
+           2/2 ✔     ┃    2/2 ✔          2/2 ✔
+                     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+       ✔ 2 tests complete.
+       [Press ENTER to run tests; q to quit; p to pause]
+     #+END_EXAMPLE
+
+   - In CI mode:
+     #+begin_src sh
+       npm test
+     #+end_src
+
+     Sample output:
+     #+BEGIN_EXAMPLE
+       > testem ci --parallel 3
+
+       ok 1 Chrome 59.0 - hello() should be "hello world"
+       ok 2 Chrome 59.0 - hello(bob) should be "hello bob"
+       ok 3 Safari 10.1 - hello() should be "hello world"
+       ok 4 Safari 10.1 - hello(bob) should be "hello bob"
+       ok 5 Safari 10.1 - hello() should be "hello world"
+       ok 6 Safari 10.1 - hello(bob) should be "hello bob"
+       ok 7 Firefox 54.0 - hello() should be "hello world"
+       ok 8 Firefox 54.0 - hello(bob) should be "hello bob"
+
+       1..8
+       # tests 8
+       # pass  8
+       # skip  0
+       # fail  0
+     #+END_EXAMPLE
