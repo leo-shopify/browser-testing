@@ -1,11 +1,12 @@
+/.reify-cache/
 /lib/
 /node_modules/
 /src/
 
-/.babelrc
 /bundle.js
+/node-tests.js
 /package-lock.json
 /package.json
+/rollup.config.js
 /testem.json
 /tests.js
-/rollup.config.js

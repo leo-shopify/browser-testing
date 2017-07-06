@@ -19,7 +19,7 @@ Versions used in the document:
 2. Install packages as dev dependencies:
    #+begin_src sh
      npm install --save-dev\
-         tape testem rollup\
+         tape testem reify rollup\
          rollup-plugin-node-resolve\
          rollup-plugin-commonjs\
          rollup-plugin-node-builtins\
@@ -96,12 +96,13 @@ Versions used in the document:
 
    E.g.:
    #+RESULTS:
-   | Launcher  | Type    | CI | Dev |
-   |-----------+---------+----+-----|
-   | Firefox   | browser | ✔  | ✔   |
-   | Chrome    | browser | ✔  | ✔   |
-   | Safari    | browser | ✔  | ✔   |
-   | PhantomJS | browser | ✔  |     |
+   | Launcher  | Type         | CI | Dev |
+   |-----------+--------------+----+-----|
+   | Firefox   | browser      | ✔  | ✔   |
+   | Chrome    | browser      | ✔  | ✔   |
+   | Safari    | browser      | ✔  | ✔   |
+   | PhantomJS | browser      |    |     |
+   | Node      | process(TAP) | ✔  | ✔   |
 
 6. Create a =testem.json= configuration file:
    #+begin_src json :tangle testem.json
@@ -109,14 +110,48 @@ Versions used in the document:
        "framework": "tap",
        "serve_files": ["bundle.js"],
        "before_tests": "npm run build:tests",
-       "launch_in_dev": ["Firefox", "Chrome", "Safari"]
+       "launchers": {
+         "Node": {
+           "command": "node --require reify node-tests.js",
+           "protocol": "tap"
+         }
+       },
+       "launch_in_dev": ["Node", "Firefox", "Chrome", "Safari"],
+       "launch_in_ci": ["Node", "Firefox", "Chrome", "Safari"]
      }
    #+end_src
    =tap= is used as the framework since I'm using =tape= for testing, but Mocha
    and others are also available. See the [[https://github.com/testem/testem/blob/master/docs/config_file.md][configuration file docs]] for details.
 
-7. Create a =tests.js= file with the tests:
+7. Create a =tests.js= file with for the browser tests:
    #+begin_src javascript :tangle tests.js
+     import {test} from 'tape';
+
+     function domDomBoys(name){
+       let p = document.createElement('p');
+       p.textContent = `hello ${name || 'world'}`;
+       document.body.appendChild(p);
+     }
+
+     test('domDomBoys say hello', t => {
+       domDomBoys();
+       t.is(document.querySelectorAll('p')[0].textContent,
+            'hello world',
+            'domDomBoys() should be "hello world"');
+       t.end();
+     });
+
+     test('domDomBoys say hello to james', t => {
+       domDomBoys('james');
+       t.is(document.querySelectorAll('p')[1].textContent,
+            'hello james',
+            'domDomBoys() should be "hello james"');
+       t.end();
+     });
+   #+end_src
+
+8. Create a =node-tests.js= file with for node tests:
+   #+begin_src javascript :tangle node-tests.js
      import {test} from 'tape';
 
      function hello(name){
@@ -134,7 +169,7 @@ Versions used in the document:
      });
    #+end_src
 
-8. Run the tests:
+9. Run the tests:
    - In TDD mode:
      #+begin_src sh
        npm run testem
@@ -146,10 +181,9 @@ Versions used in the document:
        Open the URL below in a browser to connect.
        http://localhost:7357/
        ━━━━━━━━━━━━━━┓
-           Firefox   ┃     Chrome         Safari
-           2/2 ✔     ┃    2/2 ✔          2/2 ✔
-                     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+             Node    ┃    Firefox         Chrome         Safari
+           2/2 ✔     ┃    2/2 ✔          2/2 ✔          2/2 ✔
+                     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
        ✔ 2 tests complete.
        [Press ENTER to run tests; q to quit; p to pause]
@@ -164,18 +198,20 @@ Versions used in the document:
      #+BEGIN_EXAMPLE
        > testem ci --parallel 3
 
-       ok 1 Chrome 59.0 - hello() should be "hello world"
-       ok 2 Chrome 59.0 - hello(bob) should be "hello bob"
-       ok 3 Safari 10.1 - hello() should be "hello world"
-       ok 4 Safari 10.1 - hello(bob) should be "hello bob"
-       ok 5 Safari 10.1 - hello() should be "hello world"
-       ok 6 Safari 10.1 - hello(bob) should be "hello bob"
-       ok 7 Firefox 54.0 - hello() should be "hello world"
-       ok 8 Firefox 54.0 - hello(bob) should be "hello bob"
+       ok 1 Node - hello() should be "hello world"
+       ok 2 Node - hello(bob) should be "hello bob"
+       ok 3 Chrome 59.0 - domDomBoys() should be "hello world"
+       ok 4 Chrome 59.0 - domDomBoys() should be "hello james"
+       ok 5 Safari 10.1 - domDomBoys() should be "hello world"
+       ok 6 Safari 10.1 - domDomBoys() should be "hello james"
+       ok 7 Firefox 54.0 - domDomBoys() should be "hello world"
+       ok 8 Firefox 54.0 - domDomBoys() should be "hello james"
 
        1..8
        # tests 8
        # pass  8
        # skip  0
        # fail  0
+
+       # ok
      #+END_EXAMPLE
